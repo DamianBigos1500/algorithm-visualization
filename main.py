@@ -1,3 +1,4 @@
+from typing import List
 import pygame
 import math
 from queue import PriorityQueue
@@ -86,7 +87,21 @@ class Spot:
         pygame.draw.rect(win, self.color, (self.x, self.y, self.width, self.width))
 
     def update_neighbor(self, grid):
-        pass
+        self.neightbors = []
+        if (
+            self.row < self.total_rows - 1
+            and not grid[self.row + 1][self.col].is_barrier()
+        ):  # DOWN
+            self.neightbors.append(grid[self.row + 1][self.col])
+        if self.row > 0 and not grid[self.row - 1][self.col].is_barrier():  # UP
+            self.neightbors.append(grid[self.row - 1][self.col])
+        if (
+            self.col < self.total_rows - 1
+            and not grid[self.row][self.col + 1].is_barrier()
+        ):  # RIGHT
+            self.neightbors.append(grid[self.row][self.col + 1])
+        if self.col > 0 and not grid[self.row][self.col - 1].is_barrier():  # LEFT
+            self.neightbors.append(grid[self.row][self.col - 1])
 
     def __lt__(self, other):
         return False
@@ -96,6 +111,62 @@ def h(p1, p2):
     x1, y1 = p1
     x2, y2 = p2
     return abs(x1 - x2) + abs(y1 - y2)
+
+
+def reconstruct_path(came_from, current, draw):
+    while current in came_from:
+        current = came_from[current]
+        current.make_path()
+        draw()
+
+
+def algorithm(draw, grid, start, end):
+    # draw()
+    count = 0
+
+    open_set = PriorityQueue()
+    open_set.put((0, count, start))
+
+    came_from = {}
+
+    g_score = {spot: float("inf") for row in grid for spot in row}
+    g_score[start] = 0
+    f_score = {spot: float("inf") for row in grid for spot in row}
+    f_score[start] = h(start.get_pos(), end.get_pos())
+
+    open_set_hash = {start}
+
+    while not open_set.empty():
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+
+        current = open_set.get()[2]
+        open_set_hash.remove(current)
+
+        if current == end:
+            reconstruct_path(came_from, end, draw)
+            return True
+
+        for neighbor in current.neightbors:
+            temp_g_score = g_score[current] + 1
+            print((neighbor.get_pos()))
+
+            if temp_g_score < g_score[neighbor]:
+                came_from[neighbor] = current
+                g_score[neighbor] = temp_g_score
+                f_score[neighbor] = temp_g_score + h(neighbor.get_pos(), end.get_pos())
+
+                if neighbor not in open_set_hash:
+                    count += 1
+                    open_set.put((f_score[neighbor], count, neighbor))
+                    open_set_hash.add(neighbor)
+                    neighbor.make_open()
+        draw()
+
+        if current != start:
+            current.make_closed()
+    return False
 
 
 def make_grid(rows, width):
@@ -142,11 +213,11 @@ def get_clicked_pos(pos, rows, width):
 
 
 def main(win, width):
-    ROWS = 30
-    grid = make_grid(ROWS, width)
+    ROWS = 50
+    grid: List[List[Spot]] = make_grid(ROWS, width)
 
-    start = None
-    end = None
+    start: Spot | None = None
+    end: Spot | None = None
 
     run = True
     started = False
@@ -172,12 +243,27 @@ def main(win, width):
                 elif not end and spot != start:
                     end = spot
                     end.make_end()
-                    
+
                 elif spot != end and spot != start:
                     spot.make_barrier()
 
             elif pygame.mouse.get_pressed()[2]:  # RIGHT
-                pass
+                pos = pygame.mouse.get_pos()
+                row, col = get_clicked_pos(pos, ROWS, width)
+                spot = grid[row][col]
+
+                spot.reset()
+                if spot == start:
+                    start = None
+                elif spot == end:
+                    end = None
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE and not started:
+                    for row in grid:
+                        for spot in row:
+                            spot.update_neighbor(grid)
+                    algorithm(lambda: draw(win, grid, ROWS, width), grid, start, end)
+
     pygame.quit()
 
 
